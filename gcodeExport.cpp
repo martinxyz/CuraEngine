@@ -408,7 +408,6 @@ GCodePlanner::GCodePlanner(GCodeExport& gcode, int travelSpeed, int retractionMi
     lastPosition = gcode.getPositionXY();
     comb = NULL;
     extrudeSpeedFactor = 100;
-    travelSpeedFactor = 100;
     extraTime = 0.0;
     totalPrintTime = 0.0;
     forceRetraction = false;
@@ -581,8 +580,6 @@ void GCodePlanner::writeGCode(bool liftHeadIfNeeded, int layerThickness)
         
         if (path->config->lineWidth != 0)// Only apply the extrudeSpeedFactor to extrusion moves
             speed = speed * extrudeSpeedFactor / 100;
-        else
-            speed = speed * travelSpeedFactor / 100;
         
         if (path->points.size() == 1 && path->config != &travelConfig && shorterThen(gcode.getPositionXY() - path->points[0], path->config->lineWidth * 2))
         {

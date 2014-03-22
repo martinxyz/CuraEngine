@@ -139,7 +139,6 @@ private:
     
     GCodePathConfig travelConfig;
     int extrudeSpeedFactor;
-    int travelSpeedFactor;
     int currentExtruder;
     int retractionMinimalDistance;
     bool forceRetraction;
@@ -194,15 +193,6 @@ public:
     int getExtrudeSpeedFactor()
     {
         return this->extrudeSpeedFactor;
-    }
-    void setTravelSpeedFactor(int speedFactor)
-    {
-        if (speedFactor < 1) speedFactor = 1;
-        this->travelSpeedFactor = speedFactor;
-    }
-    int getTravelSpeedFactor()
-    {
-        return this->travelSpeedFactor;
     }
     
     void addTravel(Point p);
