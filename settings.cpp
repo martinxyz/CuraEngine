@@ -29,7 +29,7 @@ ConfigSettings::ConfigSettings()
     SETTING(skirtLineCount, 1);
     SETTING(skirtMinLength, 0);
 
-    SETTING(initialSpeedupLayers, 4);
+    SETTING(initialSpeedupLayers, 4); // FIXME: refactoring, to be replace with a new setting
     SETTING(initialLayerSpeed, 20);
     SETTING(printSpeed, 50);
     SETTING(infillSpeed, 50);
