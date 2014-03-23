@@ -314,6 +314,10 @@ Slicer::Slicer(OptimizedVolume* ov, int32_t initial, int32_t thickness, bool kee
     
     int layerCount = (modelSize.z - initial) / thickness + 1;
     log("Layer count: %i\n", layerCount);
+    if (layerCount < 0) {
+        logError("Negative layer count!\n");
+        return;
+    }
     layers.resize(layerCount);
     
     for(int32_t layerNr = 0; layerNr < layerCount; layerNr++)
