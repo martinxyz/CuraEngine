@@ -230,6 +230,8 @@ public:
     void addPolygonsByOptimizer(Polygons& polygons, GCodePathConfig* config);
     
     void enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed);
+
+    int smoothSpeedChanges(int firstSpeed, float maxSpeedChangePerMM, bool forward);
     
     void writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int layerThickness);
 };

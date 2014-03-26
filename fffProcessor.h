@@ -343,7 +343,7 @@ private:
         }
         fileNr++;
 
-        unsigned int totalLayers = storage.volumes[0].layers.size();
+        int totalLayers = storage.volumes[0].layers.size();
         gcode.writeComment("Layer count: %d", totalLayers);
 
         if (config.raftBaseThickness > 0 && config.raftInterfaceThickness > 0)
@@ -411,9 +411,9 @@ private:
         }
 
         int volumeIdx = 0;
-        unsigned int planLayerNr = 0;
+        int planLayerNr = 0;
         vector<GCodePlanner*> plannedLayers(totalLayers, NULL);
-        for(unsigned int exportLayerNr=0; exportLayerNr<totalLayers; exportLayerNr++)
+        for(int exportLayerNr=0; exportLayerNr<totalLayers; exportLayerNr++)
         {
             while(planLayerNr < exportLayerNr + 10 && planLayerNr < totalLayers)
             {
@@ -461,10 +461,25 @@ private:
 
                 plan.enforceSpeedLimits(config.minimalLayerTime, config.minimalFeedrate, maxSpeed);
 
+
                 planLayerNr++;
             }
 
-            // TODO: update planned speed
+            { // update planned speed
+                // consider the past (OPTIMIZE: only a single pass is needed)
+                int maxSpeed;
+                maxSpeed = 0;
+                for(int i=exportLayerNr; i<planLayerNr; i++)
+                {
+                    maxSpeed = plannedLayers[i]->smoothSpeedChanges(maxSpeed, 0.03, true);
+                }
+                // consider the future (OPTIMIZE: can be stopped early in many cases)
+                maxSpeed = 0;
+                for(int i=planLayerNr-1; i>=exportLayerNr; i--)
+                {
+                    maxSpeed = plannedLayers[i]->smoothSpeedChanges(maxSpeed, 0.03, false);
+                }
+            }
 
             // export one layer
             logProgress("export", exportLayerNr+1, totalLayers);

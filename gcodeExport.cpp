@@ -569,6 +569,35 @@ void GCodePlanner::enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed
     this->layerTime = totalTime;
 }
 
+int GCodePlanner::smoothSpeedChanges(int firstSpeed, float maxSpeedChangePerMM, bool forward)
+{
+    //float maxSpeed = firstSpeed;
+    Point p0 = startPosition;
+    float maxSpeed = firstSpeed;
+    // OPTIMIZE: check if significant time is lost when doing this on huge layers where it is not needed.
+    for(unsigned int n=0; n<paths.size(); n++)
+    {
+        int nn = forward ? n : (paths.size() - 1 - n);
+        for(unsigned int i=0; i<paths[nn].segments.size(); i++)
+        {
+            int ii = forward ? i : (paths[nn].segments.size() - 1 - i);
+
+            GCodePathSegment &seg = paths[nn].segments[ii];
+            if (seg.lineWidth == 0)
+                continue;
+            float speed = seg.speed;
+            if (maxSpeed == 0)
+                maxSpeed = speed;
+            if (speed > maxSpeed)
+                speed = maxSpeed;
+            maxSpeed = speed + vSizeMM(p0 - seg.pos) * maxSpeedChangePerMM;
+            seg.speed = speed; // rounding...
+            p0 = seg.pos;
+        }
+    }
+    return maxSpeed;
+}
+
 void GCodePlanner::writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int layerThickness)
 {
     GCodePathConfig* lastConfig = NULL;
