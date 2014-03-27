@@ -27,7 +27,8 @@ private:
     Point3 currentPosition;
     Point extruderOffset[MAX_EXTRUDERS];
     char extruderCharacter[MAX_EXTRUDERS];
-    int currentSpeed, retractionSpeed;
+    double currentSpeed;
+    int retractionSpeed;
     int zPos;
     bool isRetracted;
     int extruderNr;
@@ -79,7 +80,7 @@ public:
     
     void writeDelay(double timeAmount);
     
-    void writeMove(Point p, int speed, int lineWidth);
+    void writeMove(Point p, double speed, int lineWidth);
     
     void writeRetraction();
     
@@ -119,7 +120,7 @@ class GCodePathSegment
 {
 public:
     Point pos;
-    int speed;
+    double speed;
     int lineWidth;
 
     GCodePathSegment(Point p, GCodePathConfig * config) : pos(p), speed(config->speed), lineWidth(config->lineWidth) {}
@@ -231,7 +232,7 @@ public:
     
     void enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed);
 
-    int smoothSpeedChanges(int firstSpeed, float maxSpeedChangePerMM, bool forward);
+    double smoothSpeedChanges(double firstSpeed, double maxSpeedChangePerMM, bool forward);
     
     void writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int layerThickness);
 };

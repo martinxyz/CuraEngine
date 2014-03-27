@@ -461,13 +461,12 @@ private:
 
                 plan.enforceSpeedLimits(config.minimalLayerTime, config.minimalFeedrate, maxSpeed);
 
-
                 planLayerNr++;
             }
 
             { // update planned speed
                 // consider the past (OPTIMIZE: only a single pass is needed)
-                int maxSpeed;
+                double maxSpeed;
                 maxSpeed = 0;
                 for(int i=exportLayerNr; i<planLayerNr; i++)
                 {

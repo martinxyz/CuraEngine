@@ -30,7 +30,7 @@ GCodeExport::GCodeExport()
     for(unsigned int e=0; e<MAX_EXTRUDERS; e++)
         totalFilament[e] = 0.0;
     
-    currentSpeed = 0;
+    currentSpeed = 0.0;
     retractionSpeed = 45;
     isRetracted = true;
     setFlavor(GCODE_FLAVOR_REPRAP);
@@ -190,14 +190,14 @@ void GCodeExport::writeDelay(double timeAmount)
     totalPrintTime += timeAmount;
 }
 
-void GCodeExport::writeMove(Point p, int speed, int lineWidth)
+void GCodeExport::writeMove(Point p, double speed, int lineWidth)
 {
     if (flavor == GCODE_FLAVOR_BFB)
     {
         //For Bits From Bytes machines, we need to handle this completely differently. As they do not use E values but RPM values.
-        float fspeed = speed * 60;
-        float rpm = (extrusionPerMM * double(lineWidth) / 1000.0) * speed * 60;
-        const float mm_per_rpm = 4.0; //All BFB machines have 4mm per RPM extrusion.
+        double fspeed = speed * 60;
+        double rpm = (extrusionPerMM * double(lineWidth) / 1000.0) * speed * 60;
+        const double mm_per_rpm = 4.0; //All BFB machines have 4mm per RPM extrusion.
         rpm /= mm_per_rpm;
         if (rpm > 0)
         {
@@ -237,7 +237,7 @@ void GCodeExport::writeMove(Point p, int speed, int lineWidth)
             if (isRetracted)
             {
                 if (retractionZHop > 0)
-                    fprintf(f, "G1 Z%0.2f\n", float(currentPosition.z)/1000);
+                    fprintf(f, "G1 Z%0.2f\n", double(currentPosition.z)/1000);
                 if (flavor == GCODE_FLAVOR_ULTIGCODE)
                 {
                     fprintf(f, "G11\n");
@@ -259,7 +259,7 @@ void GCodeExport::writeMove(Point p, int speed, int lineWidth)
 
         if (currentSpeed != speed)
         {
-            fprintf(f, " F%i", speed * 60);
+            fprintf(f, " F%i", int(speed * 60));
             currentSpeed = speed;
         }
 
@@ -515,7 +515,7 @@ void GCodePlanner::simpleTimeEstimate(double &travelTime, double &extrudeTime)
         for(unsigned int i=0; i<path->segments.size(); i++)
         {
             GCodePathSegment &seg = path->segments[i];
-            double thisTime = vSizeMM(p0 - seg.pos) / double(seg.speed);
+            double thisTime = vSizeMM(p0 - seg.pos) / seg.speed;
             if (seg.lineWidth != 0)
                 extrudeTime += thisTime;
             else
@@ -549,7 +549,7 @@ void GCodePlanner::enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed
             GCodePathSegment &seg = paths[n].segments[i];
             if (seg.lineWidth == 0)
                 continue;
-            int speed = seg.speed * factor;
+            double speed = seg.speed * factor;
             if (minSpeed != 0 && speed < minSpeed)
                 speed = minSpeed;
             if (maxSpeed != 0 && speed > maxSpeed)
@@ -569,11 +569,10 @@ void GCodePlanner::enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed
     this->layerTime = totalTime;
 }
 
-int GCodePlanner::smoothSpeedChanges(int firstSpeed, float maxSpeedChangePerMM, bool forward)
+double GCodePlanner::smoothSpeedChanges(double firstSpeed, double maxSpeedChangePerMM, bool forward)
 {
-    //float maxSpeed = firstSpeed;
     Point p0 = startPosition;
-    float maxSpeed = firstSpeed;
+    double maxSpeed = firstSpeed;
     // OPTIMIZE: check if significant time is lost when doing this on huge layers where it is not needed.
     for(unsigned int n=0; n<paths.size(); n++)
     {
@@ -585,13 +584,13 @@ int GCodePlanner::smoothSpeedChanges(int firstSpeed, float maxSpeedChangePerMM, 
             GCodePathSegment &seg = paths[nn].segments[ii];
             if (seg.lineWidth == 0)
                 continue;
-            float speed = seg.speed;
+            double speed = seg.speed;
             if (maxSpeed == 0)
                 maxSpeed = speed;
             if (speed > maxSpeed)
                 speed = maxSpeed;
             maxSpeed = speed + vSizeMM(p0 - seg.pos) * maxSpeedChangePerMM;
-            seg.speed = speed; // rounding...
+            seg.speed = speed;
             p0 = seg.pos;
         }
     }
