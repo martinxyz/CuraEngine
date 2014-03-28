@@ -232,7 +232,7 @@ public:
     
     void enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed);
 
-    double smoothSpeedChanges(double firstSpeed, double maxSpeedChangePerMM, bool forward);
+    double limitFlowGrowthRate(double initialFlow2D, double maxFlowGrowthRate, bool forward);
     
     void writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int layerThickness);
 };

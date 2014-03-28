@@ -569,10 +569,12 @@ void GCodePlanner::enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed
     this->layerTime = totalTime;
 }
 
-double GCodePlanner::smoothSpeedChanges(double firstSpeed, double maxSpeedChangePerMM, bool forward)
+double GCodePlanner::limitFlowGrowthRate(double initialFlow2D, double maxFlowGrowthRate, bool forward)
 {
+    // We limit both decay and growth of the flow.
+    // Decay is limited by limiting growth backwards in time.
     Point p0 = startPosition;
-    double maxSpeed = firstSpeed;
+    double maxFlow = initialFlow2D;
     // OPTIMIZE: check if significant time is lost when doing this on huge layers where it is not needed.
     for(unsigned int n=0; n<paths.size(); n++)
     {
@@ -584,17 +586,20 @@ double GCodePlanner::smoothSpeedChanges(double firstSpeed, double maxSpeedChange
             GCodePathSegment &seg = paths[nn].segments[ii];
             if (seg.lineWidth == 0)
                 continue;
-            double speed = seg.speed;
-            if (maxSpeed == 0)
-                maxSpeed = speed;
-            if (speed > maxSpeed)
-                speed = maxSpeed;
-            maxSpeed = speed + vSizeMM(p0 - seg.pos) * maxSpeedChangePerMM;
-            seg.speed = speed;
+            double flow = seg.speed * seg.lineWidth;
+            if (maxFlow == 0)
+                maxFlow = flow;
+            if (flow > maxFlow)
+            {
+                flow = maxFlow;
+                seg.speed = flow / seg.lineWidth;
+            }
+            // We achieve exponential growth (in time) by doing constant growth (per extruded volume).
+            maxFlow = flow + vSizeMM(p0 - seg.pos) * seg.lineWidth * maxFlowGrowthRate;
             p0 = seg.pos;
         }
     }
-    return maxSpeed;
+    return maxFlow;
 }
 
 void GCodePlanner::writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int layerThickness)

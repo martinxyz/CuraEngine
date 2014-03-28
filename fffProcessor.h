@@ -465,18 +465,31 @@ private:
             }
 
             { // update planned speed
+
+                // We limit both doubling time and half life time using the same parameter.
+                double flowDoublingTime = 23.1; // parameter (in seconds)
+                double rate = M_LN2 / flowDoublingTime;
+
+                double flow3D;
                 // consider the past (OPTIMIZE: only a single pass is needed)
-                double maxSpeed;
-                maxSpeed = 0;
+                flow3D = 0;
                 for(int i=exportLayerNr; i<planLayerNr; i++)
                 {
-                    maxSpeed = plannedLayers[i]->smoothSpeedChanges(maxSpeed, 0.03, true);
+                    double thickness = config.layerThickness;
+                    //if (i == 0) thickness = config.initialLayerThickness; // doesn't correspond to actual initial layer flow
+                    double flow2D = flow3D / thickness;
+                    flow2D = plannedLayers[i]->limitFlowGrowthRate(flow2D, rate, true);
+                    flow3D = flow2D * thickness;
                 }
                 // consider the future (OPTIMIZE: can be stopped early in many cases)
-                maxSpeed = 0;
+                flow3D = 0;
                 for(int i=planLayerNr-1; i>=exportLayerNr; i--)
                 {
-                    maxSpeed = plannedLayers[i]->smoothSpeedChanges(maxSpeed, 0.03, false);
+                    double thickness = config.layerThickness;
+                    //if (i == 0) thickness = config.initialLayerThickness; // doesn't correspond to actual initial layer flow
+                    double flow2D = flow3D / thickness;
+                    flow2D = plannedLayers[i]->limitFlowGrowthRate(flow2D, rate, false);
+                    flow3D = flow2D * thickness;
                 }
             }
 
