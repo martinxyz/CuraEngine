@@ -387,7 +387,7 @@ private:
                 gcode.setExtrusion(config.raftInterfaceThickness, config.filamentDiameter, config.filamentFlow);
 
                 Polygons raftLines;
-                generateLineInfill(storage.raftOutline, raftLines, config.raftInterfaceLinewidth, config.raftInterfaceLineSpacing, config.infillOverlap, 45);
+                generateLineInfill(storage.raftOutline, raftLines, config.raftInterfaceLinewidth, config.raftInterfaceLineSpacing, config.infillOverlap, config.raftSurfaceLayers > 0 ? 45 : 90);
                 plan.addPolygonsByOptimizer(raftLines, &raftInterfaceConfig);
 
                 plan.writeGCode(gcode, false, config.raftInterfaceThickness);

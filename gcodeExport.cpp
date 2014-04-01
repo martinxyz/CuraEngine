@@ -175,7 +175,7 @@ void GCodeExport::writeLine(const char* line, ...)
 
 void GCodeExport::resetExtrusionValue()
 {
-    if (extrusionAmount != 0.0 && flavor != GCODE_FLAVOR_MAKERBOT)
+    if (extrusionAmount != 0.0 && flavor != GCODE_FLAVOR_MAKERBOT && flavor != GCODE_FLAVOR_BFB)
     {
         fprintf(f, "G92 %c0\n", extruderCharacter[extruderNr]);
         totalFilament[extruderNr] += extrusionAmount;
@@ -206,10 +206,10 @@ void GCodeExport::writeMove(Point p, double speed, int lineWidth)
                 if (currentSpeed != int(rpm * 10))
                 {
                     //fprintf(f, "; %f e-per-mm %d mm-width %d mm/s\n", extrusionPerMM, lineWidth, speed);
-                    fprintf(f, "M108 S%0.1f\n", rpm * 10);
+                    fprintf(f, "M108 S%0.1f\n", rpm);
                     currentSpeed = int(rpm * 10);
                 }
-                fprintf(f, "M101\n");
+                fprintf(f, "M%d01\n", extruderNr);
                 isRetracted = false;
             }
             //Fix the speed by the actual RPM we are asking, because of rounding errors we cannot get all RPM values, but we have a lot more resolution in the feedrate value.
@@ -301,6 +301,13 @@ void GCodeExport::switchExtruder(int newExtruder)
 {
     if (extruderNr == newExtruder)
         return;
+    if (flavor == GCODE_FLAVOR_BFB)
+    {
+        if (!isRetracted)
+            fprintf(f, "M103\n");
+        isRetracted = true;
+        return;
+    }
     
     if (flavor == GCODE_FLAVOR_ULTIGCODE)
     {
