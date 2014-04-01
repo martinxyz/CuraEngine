@@ -253,6 +253,13 @@ void GCodeExport::writeMove(Point p, double speed, int lineWidth)
             }
             extrusionAmount += extrusionPerMM * INT2MM(lineWidth) * vSizeMM(diff);
             fprintf(f, "G1");
+            if (0) { // debug
+                double filamentDiameter = 2.89;
+                double filamentArea = M_PI * (filamentDiameter / 2.0) * (filamentDiameter / 2.0);
+                fprintf(f, " <flow %.3f mm^3/s>", extrusionPerMM * INT2MM(lineWidth) * speed * filamentArea);
+                fprintf(f, " <speed %.3f mm/s>", speed);
+                fprintf(f, " <dist %.3f mm>", vSizeMM(diff));
+            }
         }else{
             fprintf(f, "G0");
         }
@@ -631,6 +638,9 @@ void GCodePlanner::writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int lay
         if (path->segments.size() == 1 && path->config != &travelConfig && shorterThen(gcode.getPositionXY() - path->segments[0].pos, path->segments[0].lineWidth * 2))
         {
             //Check for lots of small moves and combine them into one large line
+            //
+            //FIXME: This code creates large jumps in the flow (e.g. it can double it).
+            //       If this is wanted, it should be done before the flow smoothing.
             Point p0 = path->segments[0].pos;
             unsigned int i = n + 1;
             while(i < paths.size() && paths[i].segments.size() == 1 && shorterThen(p0 - paths[i].segments[0].pos, path->segments[0].lineWidth * 2))
