@@ -120,10 +120,11 @@ class GCodePathSegment
 {
 public:
     Point pos;
+    double length;
     double speed;
     int lineWidth;
 
-    GCodePathSegment(Point p, GCodePathConfig * config) : pos(p), speed(config->speed), lineWidth(config->lineWidth) {}
+    GCodePathSegment(Point p0, Point p1, GCodePathConfig * config) : pos(p1), length(vSizeMM(p1 - p0)), speed(config->speed), lineWidth(config->lineWidth) {}
 };
 
 class GCodePath
@@ -134,11 +135,6 @@ public:
     int extruder;
     vector<GCodePathSegment> segments;
     bool done;//Path is finished, no more moves should be added, and a new path should be started instead of any appending done to this one.
-
-    void addPoint(Point p)
-    {
-        segments.push_back(GCodePathSegment(p, config));
-    }
 };
 
 //The GCodePlanner class stores multiple moves that are planned.
@@ -164,6 +160,7 @@ private:
     GCodePath* getLatestPathWithConfig(GCodePathConfig* config);
     void forceNewPathStart();
     void simpleTimeEstimate(double &travelTime, double &extrudeTime);
+    void addPointWithConfig(Point p, GCodePathConfig* config);
 public:
     GCodePlanner(Point startPositionXY, int startExtruder, int travelSpeed, int retractionMinimalDistance);
     ~GCodePlanner();

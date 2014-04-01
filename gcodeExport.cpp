@@ -396,6 +396,14 @@ GCodePath* GCodePlanner::getLatestPathWithConfig(GCodePathConfig* config)
     ret->done = false;
     return ret;
 }
+
+void GCodePlanner::addPointWithConfig(Point p, GCodePathConfig* config)
+{
+    GCodePath *path = getLatestPathWithConfig(config);
+    path->segments.push_back(GCodePathSegment(lastPosition, p, config));
+    lastPosition = p;
+}
+
 void GCodePlanner::forceNewPathStart()
 {
     if (paths.size() > 0)
@@ -439,7 +447,7 @@ void GCodePlanner::addTravel(Point p)
         {
             for(unsigned int n=0; n<pointList.size(); n++)
             {
-                path->addPoint(pointList[n]);
+                addPointWithConfig(p, &travelConfig);
             }
         }else{
             if (!shorterThen(lastPosition - p, retractionMinimalDistance))
@@ -450,14 +458,7 @@ void GCodePlanner::addTravel(Point p)
         if (!shorterThen(lastPosition - p, retractionMinimalDistance))
             path->retract = true;
     }
-    path->addPoint(p);
-    lastPosition = p;
-}
-
-void GCodePlanner::addExtrusionMove(Point p, GCodePathConfig* config)
-{
-    getLatestPathWithConfig(config)->addPoint(p);
-    lastPosition = p;
+    addPointWithConfig(p, &travelConfig);
 }
 
 void GCodePlanner::moveInsideCombBoundary(int distance)
@@ -484,11 +485,11 @@ void GCodePlanner::addPolygon(PolygonRef polygon, int startIdx, GCodePathConfig*
     for(unsigned int i=1; i<polygon.size(); i++)
     {
         Point p1 = polygon[(startIdx + i) % polygon.size()];
-        addExtrusionMove(p1, config);
+        addPointWithConfig(p1, config);
         p0 = p1;
     }
     if (polygon.size() > 2)
-        addExtrusionMove(polygon[startIdx], config);
+        addPointWithConfig(polygon[startIdx], config);
 }
 
 void GCodePlanner::addPolygonsByOptimizer(Polygons& polygons, GCodePathConfig* config)
@@ -508,19 +509,17 @@ void GCodePlanner::simpleTimeEstimate(double &travelTime, double &extrudeTime)
 {
     travelTime = 0.0;
     extrudeTime = 0.0;
-    Point p0 = startPosition;
     for(unsigned int n=0; n<paths.size(); n++)
     {
         GCodePath* path = &paths[n];
         for(unsigned int i=0; i<path->segments.size(); i++)
         {
             GCodePathSegment &seg = path->segments[i];
-            double thisTime = vSizeMM(p0 - seg.pos) / seg.speed;
+            double thisTime = seg.length / seg.speed;
             if (seg.lineWidth != 0)
                 extrudeTime += thisTime;
             else
                 travelTime += thisTime;
-            p0 = seg.pos;
         }
     }
 }
@@ -573,7 +572,6 @@ double GCodePlanner::limitFlowGrowthRate(double initialFlow2D, double maxFlowGro
 {
     // We limit both decay and growth of the flow.
     // Decay is limited by limiting growth backwards in time.
-    Point p0 = startPosition;
     double maxFlow = initialFlow2D;
     // OPTIMIZE: check if significant time is lost when doing this on huge layers where it is not needed.
     for(unsigned int n=0; n<paths.size(); n++)
@@ -595,8 +593,7 @@ double GCodePlanner::limitFlowGrowthRate(double initialFlow2D, double maxFlowGro
                 seg.speed = flow / seg.lineWidth;
             }
             // We achieve exponential growth (in time) by doing constant growth (per extruded volume).
-            maxFlow = flow + vSizeMM(p0 - seg.pos) * seg.lineWidth * maxFlowGrowthRate;
-            p0 = seg.pos;
+            maxFlow = flow + seg.length * seg.lineWidth * maxFlowGrowthRate;
         }
     }
     return maxFlow;
