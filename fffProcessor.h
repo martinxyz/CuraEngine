@@ -476,7 +476,7 @@ private:
                 for(int i=exportLayerNr; i<planLayerNr; i++)
                 {
                     double thickness = config.layerThickness;
-                    //if (i == 0) thickness = config.initialLayerThickness; // doesn't correspond to actual initial layer flow
+                    if (i == 0) thickness = config.initialLayerThickness;
                     double flow2D = flow3D / thickness;
                     flow2D = plannedLayers[i]->limitFlowGrowthRate(flow2D, rate, true);
                     flow3D = flow2D * thickness;
@@ -486,7 +486,7 @@ private:
                 for(int i=planLayerNr-1; i>=exportLayerNr; i--)
                 {
                     double thickness = config.layerThickness;
-                    //if (i == 0) thickness = config.initialLayerThickness; // doesn't correspond to actual initial layer flow
+                    if (i == 0) thickness = config.initialLayerThickness;
                     double flow2D = flow3D / thickness;
                     flow2D = plannedLayers[i]->limitFlowGrowthRate(flow2D, rate, false);
                     flow3D = flow2D * thickness;
