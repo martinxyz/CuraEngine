@@ -464,11 +464,10 @@ private:
                 planLayerNr++;
             }
 
-            { // update planned speed
+            if (config.flowDoublingTime > 0) { // update planned speed
 
                 // We limit both doubling time and half life time using the same parameter.
-                double flowDoublingTime = 23.1; // parameter (in seconds)
-                double rate = M_LN2 / flowDoublingTime;
+                double rate = M_LN2 / config.flowDoublingTime;
 
                 double flow3D;
                 // consider the past (OPTIMIZE: only a single pass is needed)

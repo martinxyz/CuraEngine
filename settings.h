@@ -118,7 +118,7 @@ public:
     int wipeTowerSize;
     int multiVolumeOverlap;
 
-    int initialSpeedupLayers;
+    int flowDoublingTime;
     int initialLayerSpeed;
     int printSpeed;
     int infillSpeed;
