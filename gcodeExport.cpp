@@ -461,7 +461,7 @@ void GCodePlanner::addTravel(Point p)
         {
             for(unsigned int n=0; n<pointList.size(); n++)
             {
-                addPointWithConfig(p, &travelConfig);
+                addPointWithConfig(pointList[n], &travelConfig);
             }
         }else{
             if (!shorterThen(lastPosition - p, retractionMinimalDistance))
