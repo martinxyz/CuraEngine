@@ -331,7 +331,7 @@ private:
         }
         fileNr++;
 
-        unsigned int totalLayers = storage.volumes[0].layers.size();
+        int totalLayers = storage.volumes[0].layers.size();
         gcode.writeComment("Layer count: %d", totalLayers);
 
         if (config.raftBaseThickness > 0 && config.raftInterfaceThickness > 0)
@@ -347,19 +347,19 @@ private:
             {
                 gcode.writeComment("LAYER:-2");
                 gcode.writeComment("RAFT");
-                GCodePlanner gcodeLayer(gcode, config.moveSpeed, config.retractionMinimalDistance);
+                GCodePlanner plan(gcode.getPositionXY(), gcode.getExtruderNr(), config.moveSpeed, config.retractionMinimalDistance);
                 if (config.supportExtruder > 0)
-                    gcodeLayer.setExtruder(config.supportExtruder);
-                gcodeLayer.setAlwaysRetract(true);
+                    plan.setExtruder(config.supportExtruder);
+                plan.setAlwaysRetract(true);
                 gcode.setZ(config.raftBaseThickness);
                 gcode.setExtrusion(config.raftBaseThickness, config.filamentDiameter, config.filamentFlow);
-                gcodeLayer.addPolygonsByOptimizer(storage.raftOutline, &raftBaseConfig);
+                plan.addPolygonsByOptimizer(storage.raftOutline, &raftBaseConfig);
 
                 Polygons raftLines;
                 generateLineInfill(storage.raftOutline, raftLines, config.raftBaseLinewidth, config.raftLineSpacing, config.infillOverlap, 0);
-                gcodeLayer.addPolygonsByOptimizer(raftLines, &raftBaseConfig);
+                plan.addPolygonsByOptimizer(raftLines, &raftBaseConfig);
 
-                gcodeLayer.writeGCode(false, config.raftBaseThickness);
+                plan.writeGCode(gcode, false, config.raftBaseThickness);
             }
 
             if (config.raftFanSpeed) {
@@ -369,108 +369,154 @@ private:
             {
                 gcode.writeComment("LAYER:-1");
                 gcode.writeComment("RAFT");
-                GCodePlanner gcodeLayer(gcode, config.moveSpeed, config.retractionMinimalDistance);
-                gcodeLayer.setAlwaysRetract(true);
+                GCodePlanner plan(gcode.getPositionXY(), gcode.getExtruderNr(), config.moveSpeed, config.retractionMinimalDistance);
+                plan.setAlwaysRetract(true);
                 gcode.setZ(config.raftBaseThickness + config.raftInterfaceThickness);
                 gcode.setExtrusion(config.raftInterfaceThickness, config.filamentDiameter, config.filamentFlow);
 
                 Polygons raftLines;
                 generateLineInfill(storage.raftOutline, raftLines, config.raftInterfaceLinewidth, config.raftInterfaceLineSpacing, config.infillOverlap, config.raftSurfaceLayers > 0 ? 45 : 90);
-                gcodeLayer.addPolygonsByOptimizer(raftLines, &raftInterfaceConfig);
+                plan.addPolygonsByOptimizer(raftLines, &raftInterfaceConfig);
 
-                gcodeLayer.writeGCode(false, config.raftInterfaceThickness);
+                plan.writeGCode(gcode, false, config.raftInterfaceThickness);
             }
 
             for (int raftSurfaceLayer=1; raftSurfaceLayer<=config.raftSurfaceLayers; raftSurfaceLayer++)
             {
                 gcode.writeComment("LAYER:FullRaft");
                 gcode.writeComment("RAFT");
-                GCodePlanner gcodeLayer(gcode, config.moveSpeed, config.retractionMinimalDistance);
-                gcodeLayer.setAlwaysRetract(true);
+                GCodePlanner plan(gcode.getPositionXY(), gcode.getExtruderNr(), config.moveSpeed, config.retractionMinimalDistance);
+                plan.setAlwaysRetract(true);
                 gcode.setZ(config.raftBaseThickness + config.raftInterfaceThickness + config.raftSurfaceThickness*raftSurfaceLayer);
                 gcode.setExtrusion(config.raftSurfaceThickness, config.filamentDiameter, config.filamentFlow);
 
                 Polygons raftLines;
                 generateLineInfill(storage.raftOutline, raftLines, config.raftSurfaceLinewidth, config.raftSurfaceLineSpacing, config.infillOverlap, 90);
-                gcodeLayer.addPolygonsByOptimizer(raftLines, &raftSurfaceConfig);
+                plan.addPolygonsByOptimizer(raftLines, &raftSurfaceConfig);
 
-                gcodeLayer.writeGCode(false, config.raftInterfaceThickness);
+                plan.writeGCode(gcode, false, config.raftInterfaceThickness);
             }
         }
 
         int volumeIdx = 0;
-        for(unsigned int layerNr=0; layerNr<totalLayers; layerNr++)
+        int planLayerNr = 0;
+        vector<GCodePlanner*> plannedLayers(totalLayers, NULL);
+        for(int exportLayerNr=0; exportLayerNr<totalLayers; exportLayerNr++)
         {
-            cura::logProgress("export", layerNr+1, totalLayers);
-
-            int extrusionWidth = config.extrusionWidth;
-            if (layerNr == 0)
-                extrusionWidth = config.layer0extrusionWidth;
-            if (int(layerNr) < config.initialSpeedupLayers)
+            while(planLayerNr < exportLayerNr + 10 && planLayerNr < totalLayers)
             {
-                int n = config.initialSpeedupLayers;
-#define SPEED_SMOOTH(speed) \
-                std::min<int>((speed), (((speed)*layerNr)/n + (config.initialLayerSpeed*(n-layerNr)/n)))
-                skirtConfig.setData(SPEED_SMOOTH(config.printSpeed), extrusionWidth, "SKIRT");
-                inset0Config.setData(SPEED_SMOOTH(config.inset0Speed), extrusionWidth, "WALL-OUTER");
-                insetXConfig.setData(SPEED_SMOOTH(config.insetXSpeed), extrusionWidth, "WALL-INNER");
-                fillConfig.setData(SPEED_SMOOTH(config.infillSpeed), extrusionWidth,  "FILL");
-                supportConfig.setData(SPEED_SMOOTH(config.printSpeed), extrusionWidth, "SUPPORT");
-#undef SPEED_SMOOTH
-            }else{
+                // plan one layer
+
+                int extrusionWidth = config.extrusionWidth;
+                if (planLayerNr == 0)
+                    extrusionWidth = config.layer0extrusionWidth;
+
                 skirtConfig.setData(config.printSpeed, extrusionWidth, "SKIRT");
                 inset0Config.setData(config.inset0Speed, extrusionWidth, "WALL-OUTER");
                 insetXConfig.setData(config.insetXSpeed, extrusionWidth, "WALL-INNER");
                 fillConfig.setData(config.infillSpeed, extrusionWidth, "FILL");
                 supportConfig.setData(config.printSpeed, extrusionWidth, "SUPPORT");
+                
+                Point startXY;
+                int startExtruder;
+                if (planLayerNr == 0) {
+                    startXY = gcode.getExtruderNr();
+                    startExtruder = gcode.getExtruderNr();
+                } else {
+                    startXY       = plannedLayers[planLayerNr-1]->getLastPosition();
+                    startExtruder = plannedLayers[planLayerNr-1]->getLastExtruder();
+                }
+                plannedLayers[planLayerNr] = new GCodePlanner(startXY, startExtruder, config.moveSpeed, config.retractionMinimalDistance);
+                GCodePlanner &plan = *plannedLayers[planLayerNr];
+
+                bool printSupportFirst = (storage.support.generated && config.supportExtruder > 0 && config.supportExtruder == plan.getExtruder());
+                if (printSupportFirst)
+                    addSupportToPlan(storage, plan, planLayerNr);
+                
+                for(unsigned int volumeCnt = 0; volumeCnt < storage.volumes.size(); volumeCnt++)
+                {
+                    if (volumeCnt > 0)
+                        volumeIdx = (volumeIdx + 1) % storage.volumes.size();
+                    addVolumeLayerToPlan(storage, plan, volumeIdx, planLayerNr);
+                }
+                if (!printSupportFirst)
+                    addSupportToPlan(storage, plan, planLayerNr);
+                
+                // speed corrections for minimal layer times
+                int maxSpeed = 0;
+                if (planLayerNr == 0)
+                    maxSpeed = config.initialLayerSpeed;
+
+                plan.enforceSpeedLimits(config.minimalLayerTime, config.minimalFeedrate, maxSpeed);
+
+                planLayerNr++;
             }
 
-            gcode.writeComment("LAYER:%d", layerNr);
-            if (layerNr == 0)
+            if (config.flowDoublingTime > 0) { // update planned speed
+
+                // We limit both doubling time and half life time using the same parameter.
+                double rate = M_LN2 / config.flowDoublingTime;
+
+                double flow3D;
+                // consider the past (OPTIMIZE: only a single pass is needed)
+                flow3D = 0;
+                for(int i=exportLayerNr; i<planLayerNr; i++)
+                {
+                    double thickness = config.layerThickness;
+                    if (i == 0) thickness = config.initialLayerThickness;
+                    double flow2D = flow3D / thickness;
+                    flow2D = plannedLayers[i]->limitFlowGrowthRate(flow2D, rate, true);
+                    flow3D = flow2D * thickness;
+                }
+                // consider the future (OPTIMIZE: can be stopped early in many cases)
+                flow3D = 0;
+                for(int i=planLayerNr-1; i>=exportLayerNr; i--)
+                {
+                    double thickness = config.layerThickness;
+                    if (i == 0) thickness = config.initialLayerThickness;
+                    double flow2D = flow3D / thickness;
+                    flow2D = plannedLayers[i]->limitFlowGrowthRate(flow2D, rate, false);
+                    flow3D = flow2D * thickness;
+                }
+            }
+
+            // export one layer
+            cura::logProgress("export", exportLayerNr+1, totalLayers);
+
+            gcode.writeComment("LAYER:%d", exportLayerNr);
+            if (exportLayerNr == 0)
                 gcode.setExtrusion(config.initialLayerThickness, config.filamentDiameter, config.filamentFlow);
             else
                 gcode.setExtrusion(config.layerThickness, config.filamentDiameter, config.filamentFlow);
 
-            GCodePlanner gcodeLayer(gcode, config.moveSpeed, config.retractionMinimalDistance);
-            int32_t z = config.initialLayerThickness + layerNr * config.layerThickness;
+            int32_t z = config.initialLayerThickness + exportLayerNr * config.layerThickness;
             z += config.raftBaseThickness + config.raftInterfaceThickness + config.raftSurfaceLayers*config.raftSurfaceThickness;
-            if (layerNr == 0) {
+            if (exportLayerNr == 0) {
                 z += config.raftAirGap;
             }
             gcode.setZ(z);
 
-            bool printSupportFirst = (storage.support.generated && config.supportExtruder > 0 && config.supportExtruder == gcodeLayer.getExtruder());
-            if (printSupportFirst)
-                addSupportToGCode(storage, gcodeLayer, layerNr);
-
-            for(unsigned int volumeCnt = 0; volumeCnt < storage.volumes.size(); volumeCnt++)
-            {
-                if (volumeCnt > 0)
-                    volumeIdx = (volumeIdx + 1) % storage.volumes.size();
-                addVolumeLayerToGCode(storage, gcodeLayer, volumeIdx, layerNr);
-            }
-            if (!printSupportFirst)
-                addSupportToGCode(storage, gcodeLayer, layerNr);
-
-            //Finish the layer by applying speed corrections for minimal layer times
-            gcodeLayer.forceMinimalLayerTime(config.minimalLayerTime, config.minimalFeedrate);
+            GCodePlanner &plan = *plannedLayers[exportLayerNr];
 
             int fanSpeed = config.fanSpeedMin;
-            if (gcodeLayer.getExtrudeSpeedFactor() <= 50)
+            if (plan.getCoolingSpeedFactor() <= 50)
             {
                 fanSpeed = config.fanSpeedMax;
             }else{
-                int n = gcodeLayer.getExtrudeSpeedFactor() - 50;
+                int n = plan.getCoolingSpeedFactor() - 50;
                 fanSpeed = config.fanSpeedMin * n / 50 + config.fanSpeedMax * (50 - n) / 50;
             }
-            if (int(layerNr) < config.fanFullOnLayerNr)
+            if (int(exportLayerNr) < config.fanFullOnLayerNr)
             {
                 //Slow down the fan on the layers below the [fanFullOnLayerNr], where layer 0 is speed 0.
-                fanSpeed = fanSpeed * layerNr / config.fanFullOnLayerNr;
+                fanSpeed = fanSpeed * exportLayerNr / config.fanFullOnLayerNr;
             }
             gcode.writeFanCommand(fanSpeed);
 
-            gcodeLayer.writeGCode(config.coolHeadLift > 0, int(layerNr) > 0 ? config.layerThickness : config.initialLayerThickness);
+            plan.writeGCode(gcode, config.coolHeadLift > 0, int(exportLayerNr) > 0 ? config.layerThickness : config.initialLayerThickness);
+
+            delete plannedLayers[exportLayerNr];
+            plannedLayers[exportLayerNr] = NULL;
         }
 
         cura::log("Wrote layers in %5.2fs.\n", timeKeeper.restart());
@@ -482,27 +528,27 @@ private:
     }
 
     //Add a single layer from a single mesh-volume to the GCode
-    void addVolumeLayerToGCode(SliceDataStorage& storage, GCodePlanner& gcodeLayer, int volumeIdx, int layerNr)
+    void addVolumeLayerToPlan(SliceDataStorage& storage, GCodePlanner& plan, int volumeIdx, int layerNr)
     {
-        int prevExtruder = gcodeLayer.getExtruder();
-        bool extruderChanged = gcodeLayer.setExtruder(volumeIdx);
+        int prevExtruder = plan.getExtruder();
+        bool extruderChanged = plan.setExtruder(volumeIdx);
         if (layerNr == 0 && volumeIdx == 0)
         {
             if (storage.skirt.size() > 0)
-                gcodeLayer.addTravel(storage.skirt[storage.skirt.size()-1].closestPointTo(gcode.getPositionXY()));
-            gcodeLayer.addPolygonsByOptimizer(storage.skirt, &skirtConfig);
+                plan.addTravel(storage.skirt[storage.skirt.size()-1].closestPointTo(gcode.getPositionXY()));
+            plan.addPolygonsByOptimizer(storage.skirt, &skirtConfig);
         }
 
         SliceLayer* layer = &storage.volumes[volumeIdx].layers[layerNr];
         if (extruderChanged)
-            addWipeTower(storage, gcodeLayer, layerNr, prevExtruder);
+            addWipeTower(storage, plan, layerNr, prevExtruder);
 
         if (storage.oozeShield.size() > 0 && storage.volumes.size() > 1)
         {
-            gcodeLayer.setAlwaysRetract(true);
-            gcodeLayer.addPolygonsByOptimizer(storage.oozeShield[layerNr], &skirtConfig);
+            plan.setAlwaysRetract(true);
+            plan.addPolygonsByOptimizer(storage.oozeShield[layerNr], &skirtConfig);
             sendPolygonsToGui("oozeshield", layerNr, layer->printZ, storage.oozeShield[layerNr]);
-            gcodeLayer.setAlwaysRetract(!config.enableCombing);
+            plan.setAlwaysRetract(!config.enableCombing);
         }
 
         PathOrderOptimizer partOrderOptimizer(gcode.getPositionXY());
@@ -517,9 +563,9 @@ private:
             SliceLayerPart* part = &layer->parts[partOrderOptimizer.polyOrder[partCounter]];
 
             if (config.enableCombing)
-                gcodeLayer.setCombBoundary(&part->combBoundery);
+                plan.setCombBoundary(&part->combBoundery);
             else
-                gcodeLayer.setAlwaysRetract(true);
+                plan.setAlwaysRetract(true);
 
             if (config.insetCount > 0)
             {
@@ -528,14 +574,14 @@ private:
                     if (int(layerNr) >= config.downSkinCount)
                         inset0Config.spiralize = true;
                     if (int(layerNr) == config.downSkinCount && part->insets.size() > 0)
-                        gcodeLayer.addPolygonsByOptimizer(part->insets[0], &insetXConfig);
+                        plan.addPolygonsByOptimizer(part->insets[0], &insetXConfig);
                 }
                 for(int insetNr=part->insets.size()-1; insetNr>-1; insetNr--)
                 {
                     if (insetNr == 0)
-                        gcodeLayer.addPolygonsByOptimizer(part->insets[insetNr], &inset0Config);
+                        plan.addPolygonsByOptimizer(part->insets[insetNr], &inset0Config);
                     else
-                        gcodeLayer.addPolygonsByOptimizer(part->insets[insetNr], &insetXConfig);
+                        plan.addPolygonsByOptimizer(part->insets[insetNr], &insetXConfig);
                 }
             }
 
@@ -566,32 +612,32 @@ private:
                 }
             }
 
-            gcodeLayer.addPolygonsByOptimizer(fillPolygons, &fillConfig);
+            plan.addPolygonsByOptimizer(fillPolygons, &fillConfig);
             //sendPolygonsToGui("infill", layerNr, layer->z, fillPolygons);
 
             //After a layer part, make sure the nozzle is inside the comb boundary, so we do not retract on the perimeter.
             if (!config.spiralizeMode || int(layerNr) < config.downSkinCount)
-                gcodeLayer.moveInsideCombBoundary(config.extrusionWidth * 2);
+                plan.moveInsideCombBoundary(config.extrusionWidth * 2);
         }
-        gcodeLayer.setCombBoundary(NULL);
+        plan.setCombBoundary(NULL);
     }
 
-    void addSupportToGCode(SliceDataStorage& storage, GCodePlanner& gcodeLayer, int layerNr)
+    void addSupportToPlan(SliceDataStorage& storage, GCodePlanner& plan, int layerNr)
     {
         if (!storage.support.generated)
             return;
 
         if (config.supportExtruder > -1)
         {
-            int prevExtruder = gcodeLayer.getExtruder();
-            if (gcodeLayer.setExtruder(config.supportExtruder))
-                addWipeTower(storage, gcodeLayer, layerNr, prevExtruder);
+            int prevExtruder = plan.getExtruder();
+            if (plan.setExtruder(config.supportExtruder))
+                addWipeTower(storage, plan, layerNr, prevExtruder);
 
             if (storage.oozeShield.size() > 0 && storage.volumes.size() == 1)
             {
-                gcodeLayer.setAlwaysRetract(true);
-                gcodeLayer.addPolygonsByOptimizer(storage.oozeShield[layerNr], &skirtConfig);
-                gcodeLayer.setAlwaysRetract(!config.enableCombing);
+                plan.setAlwaysRetract(true);
+                plan.addPolygonsByOptimizer(storage.oozeShield[layerNr], &skirtConfig);
+                plan.setAlwaysRetract(!config.enableCombing);
             }
         }
         int32_t z = config.initialLayerThickness + layerNr * config.layerThickness;
@@ -640,28 +686,28 @@ private:
                 }
             }
 
-            gcodeLayer.forceRetract();
+            plan.forceRetract();
             if (config.enableCombing)
-                gcodeLayer.setCombBoundary(&island);
+                plan.setCombBoundary(&island);
             if (config.supportType == SUPPORT_TYPE_GRID)
-                gcodeLayer.addPolygonsByOptimizer(island, &supportConfig);
-            gcodeLayer.addPolygonsByOptimizer(supportLines, &supportConfig);
-            gcodeLayer.setCombBoundary(NULL);
+                plan.addPolygonsByOptimizer(island, &supportConfig);
+            plan.addPolygonsByOptimizer(supportLines, &supportConfig);
+            plan.setCombBoundary(NULL);
         }
     }
 
-    void addWipeTower(SliceDataStorage& storage, GCodePlanner& gcodeLayer, int layerNr, int prevExtruder)
+    void addWipeTower(SliceDataStorage& storage, GCodePlanner& plan, int layerNr, int prevExtruder)
     {
         if (config.wipeTowerSize < 1)
             return;
         //If we changed extruder, print the wipe/prime tower for this nozzle;
-        gcodeLayer.addPolygonsByOptimizer(storage.wipeTower, &supportConfig);
+        plan.addPolygonsByOptimizer(storage.wipeTower, &supportConfig);
         Polygons fillPolygons;
         generateLineInfill(storage.wipeTower, fillPolygons, config.extrusionWidth, config.extrusionWidth, config.infillOverlap, 45 + 90 * (layerNr % 2));
-        gcodeLayer.addPolygonsByOptimizer(fillPolygons, &supportConfig);
+        plan.addPolygonsByOptimizer(fillPolygons, &supportConfig);
 
         //Make sure we wipe the old extruder on the wipe tower.
-        gcodeLayer.addTravel(storage.wipePoint - config.extruderOffset[prevExtruder].p() + config.extruderOffset[gcodeLayer.getExtruder()].p());
+        plan.addTravel(storage.wipePoint - config.extruderOffset[prevExtruder].p() + config.extruderOffset[plan.getExtruder()].p());
     }
 };
 

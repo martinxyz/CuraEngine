@@ -29,7 +29,8 @@ private:
     Point3 currentPosition;
     Point extruderOffset[MAX_EXTRUDERS];
     char extruderCharacter[MAX_EXTRUDERS];
-    int currentSpeed, retractionSpeed;
+    double currentSpeed;
+    int retractionSpeed;
     int zPos;
     bool isRetracted;
     int extruderNr;
@@ -81,7 +82,7 @@ public:
     
     void writeDelay(double timeAmount);
     
-    void writeMove(Point p, int speed, int lineWidth);
+    void writeMove(Point p, double speed, int lineWidth);
     
     void writeRetraction();
     
@@ -117,42 +118,53 @@ public:
     }
 };
 
+class GCodePathSegment
+{
+public:
+    Point pos;
+    double length;
+    double speed;
+    int lineWidth;
+
+    GCodePathSegment(Point p0, Point p1, GCodePathConfig * config) : pos(p1), length(vSizeMM(p1 - p0)), speed(config->speed), lineWidth(config->lineWidth) {}
+};
+
 class GCodePath
 {
 public:
     GCodePathConfig* config;
     bool retract;
     int extruder;
-    vector<Point> points;
+    vector<GCodePathSegment> segments;
     bool done;//Path is finished, no more moves should be added, and a new path should be started instead of any appending done to this one.
 };
 
 //The GCodePlanner class stores multiple moves that are planned.
 // It facilitates the combing to keep the head inside the print.
-// It also keeps track of the print time estimate for this planning so speed adjustments can be made for the minimal-layer-time.
+// It also keeps track of the print time estimate for this planning so speed adjustments can be made.
 class GCodePlanner
 {
 private:
-    GCodeExport& gcode;
-    
+    Point startPosition;
     Point lastPosition;
     vector<GCodePath> paths;
     Comb* comb;
     
     GCodePathConfig travelConfig;
-    int extrudeSpeedFactor;
-    int travelSpeedFactor;
     int currentExtruder;
     int retractionMinimalDistance;
     bool forceRetraction;
     bool alwaysRetract;
     double extraTime;
-    double totalPrintTime;
+    double layerTime;
+    double layerTimeWithoutSpeedLimits;
 private:
     GCodePath* getLatestPathWithConfig(GCodePathConfig* config);
     void forceNewPathStart();
+    void simpleTimeEstimate(double &travelTime, double &extrudeTime);
+    void addPointWithConfig(Point p, GCodePathConfig* config);
 public:
-    GCodePlanner(GCodeExport& gcode, int travelSpeed, int retractionMinimalDistance);
+    GCodePlanner(Point startPositionXY, int startExtruder, int travelSpeed, int retractionMinimalDistance);
     ~GCodePlanner();
     
     bool setExtruder(int extruder)
@@ -188,23 +200,23 @@ public:
         forceRetraction = true;
     }
     
-    void setExtrudeSpeedFactor(int speedFactor)
+    int getCoolingSpeedFactor()
     {
-        if (speedFactor < 1) speedFactor = 1;
-        this->extrudeSpeedFactor = speedFactor;
+        if (layerTime < layerTimeWithoutSpeedLimits) {
+            return 100 * layerTime / layerTimeWithoutSpeedLimits;
+        } else {
+            return 100;
+        }
     }
-    int getExtrudeSpeedFactor()
+
+    Point getLastPosition()
     {
-        return this->extrudeSpeedFactor;
+        return lastPosition;
     }
-    void setTravelSpeedFactor(int speedFactor)
+
+    int getLastExtruder()
     {
-        if (speedFactor < 1) speedFactor = 1;
-        this->travelSpeedFactor = speedFactor;
-    }
-    int getTravelSpeedFactor()
-    {
-        return this->travelSpeedFactor;
+        return currentExtruder;
     }
     
     void addTravel(Point p);
@@ -217,11 +229,14 @@ public:
 
     void addPolygonsByOptimizer(Polygons& polygons, GCodePathConfig* config);
     
-    void forceMinimalLayerTime(double minTime, int minimalSpeed);
+    void enforceSpeedLimits(double minTime, int minSpeed, int maxSpeed);
+
+    double limitFlowGrowthRate(double initialFlow2D, double maxFlowGrowthRate, bool forward);
     
-    void writeGCode(bool liftHeadIfNeeded, int layerThickness);
+    void writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int layerThickness);
 };
 
 }//namespace cura
 
 #endif//GCODEEXPORT_H
+
