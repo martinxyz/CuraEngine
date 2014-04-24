@@ -30,7 +30,7 @@ ConfigSettings::ConfigSettings()
     SETTING(skirtLineCount, 1);
     SETTING(skirtMinLength, 0);
 
-    SETTING(flowDoublingTime, 25);
+    SETTING(flowDoublingTime, 45);
     SETTING(initialLayerSpeed, 20);
     SETTING(printSpeed, 50);
     SETTING(infillSpeed, 50);
