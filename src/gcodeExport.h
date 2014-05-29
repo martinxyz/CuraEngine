@@ -36,6 +36,8 @@ private:
     int extruderNr;
     int currentFanSpeed;
     int flavor;
+    std::string preSwitchExtruderCode;
+    std::string postSwitchExtruderCode;
     
     double totalFilament[MAX_EXTRUDERS];
     double totalPrintTime;
@@ -49,6 +51,7 @@ public:
     void replaceTagInStart(const char* tag, const char* replaceValue);
     
     void setExtruderOffset(int id, Point p);
+    void setSwitchExtruderCode(std::string preSwitchExtruderCode, std::string postSwitchExtruderCode);
     
     void setFlavor(int flavor);
     int getFlavor();
@@ -107,7 +110,7 @@ public:
     const char* name;
     bool spiralize;
     
-    GCodePathConfig() : speed(0), lineWidth(0), name(NULL), spiralize(false) {}
+    GCodePathConfig() : speed(0), lineWidth(0), name(nullptr), spiralize(false) {}
     GCodePathConfig(int speed, int lineWidth, const char* name) : speed(speed), lineWidth(lineWidth), name(name), spiralize(false) {}
     
     void setData(int speed, int lineWidth, const char* name)
@@ -187,7 +190,7 @@ public:
         if (polygons)
             comb = new Comb(*polygons);
         else
-            comb = NULL;
+            comb = nullptr;
     }
     
     void setAlwaysRetract(bool alwaysRetract)

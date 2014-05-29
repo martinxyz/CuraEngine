@@ -13,8 +13,11 @@
 #define SETTING(name, default) do { _index.push_back(_ConfigSettingIndex(STRINGIFY(name), &name)); name = (default); } while(0)
 #define SETTING2(name, altname, default) do { _index.push_back(_ConfigSettingIndex(STRINGIFY(name), &name)); _index.push_back(_ConfigSettingIndex(STRINGIFY(altname), &name)); name = (default); } while(0)
 
+ConfigSettings *ConfigSettings::config = NULL;
+
 ConfigSettings::ConfigSettings()
 {
+    config = this;
     SETTING(layerThickness, 100);
     SETTING(initialLayerThickness, 300);
     SETTING(filamentDiameter, 2890);
@@ -24,8 +27,6 @@ ConfigSettings::ConfigSettings()
     SETTING(insetCount, 2);
     SETTING(downSkinCount, 6);
     SETTING(upSkinCount, 6);
-    SETTING(sparseInfillLineDistance, 100 * extrusionWidth / 20);
-    SETTING(infillOverlap, 15);
     SETTING(skirtDistance, 6000);
     SETTING(skirtLineCount, 1);
     SETTING(skirtMinLength, 0);
@@ -33,13 +34,17 @@ ConfigSettings::ConfigSettings()
     SETTING(flowDoublingTime, 45);
     SETTING(initialLayerSpeed, 20);
     SETTING(printSpeed, 50);
-    SETTING(infillSpeed, 50);
     SETTING(inset0Speed, 50);
     SETTING(insetXSpeed, 50);
     SETTING(moveSpeed, 150);
     SETTING(fanFullOnLayerNr, 2);
 
-    SETTING(supportType, 0);
+    SETTING(sparseInfillLineDistance, 100 * extrusionWidth / 20);
+    SETTING(infillOverlap, 15);
+    SETTING(infillSpeed, 50);
+    SETTING(infillPattern, INFILL_AUTOMATIC);
+
+    SETTING(supportType, SUPPORT_TYPE_GRID);
     SETTING(supportAngle, -1);
     SETTING(supportEverywhere, 0);
     SETTING(supportLineDistance, sparseInfillLineDistance);
@@ -62,6 +67,7 @@ ConfigSettings::ConfigSettings()
     SETTING2(objectPosition.X, posx, 102500);
     SETTING2(objectPosition.Y, posy, 102500);
     SETTING(objectSink, 0);
+    SETTING(autoCenter, 1);
 
     SETTING(raftMargin, 5000);
     SETTING(raftLineSpacing, 1000);
@@ -69,8 +75,9 @@ ConfigSettings::ConfigSettings()
     SETTING(raftBaseLinewidth, 0);
     SETTING(raftInterfaceThickness, 0);
     SETTING(raftInterfaceLinewidth, 0);
-    SETTING(raftInterfaceLineSpacing, 250);
+    SETTING(raftInterfaceLineSpacing, 0);
     SETTING(raftAirGap, 0);
+    SETTING(raftAirGapLayer0, 0);
     SETTING(raftBaseSpeed, 0);
     SETTING(raftFanSpeed, 0);
     SETTING(raftSurfaceThickness, 0);
@@ -87,6 +94,7 @@ ConfigSettings::ConfigSettings()
 
     SETTING(fixHorrible, 0);
     SETTING(spiralizeMode, 0);
+    SETTING(simpleMode, 0);
     SETTING(gcodeFlavor, GCODE_FLAVOR_REPRAP);
 
     memset(extruderOffset, 0, sizeof(extruderOffset));
@@ -138,6 +146,16 @@ bool ConfigSettings::setSetting(const char* key, const char* value)
     if (stringcasecompare(key, "endCode") == 0)
     {
         this->endCode = value;
+        return true;
+    }
+    if (stringcasecompare(key, "preSwitchExtruderCode") == 0)
+    {
+        this->preSwitchExtruderCode = value;
+        return true;
+    }
+    if (stringcasecompare(key, "postSwitchExtruderCode") == 0)
+    {
+        this->postSwitchExtruderCode = value;
         return true;
     }
     return false;

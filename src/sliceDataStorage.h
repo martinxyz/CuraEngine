@@ -33,6 +33,7 @@ public:
     int sliceZ;
     int printZ;
     vector<SliceLayerPart> parts;
+    Polygons openLines;
 };
 
 /******************/
@@ -57,7 +58,7 @@ public:
     int32_t gridScale;
     int32_t gridWidth, gridHeight;
     vector<SupportPoint>* grid;
-   	SupportStorage(){grid = NULL;}
+   	SupportStorage(){grid = nullptr;}
 	  ~SupportStorage(){if(grid) delete [] grid;}
 };
 /******************/

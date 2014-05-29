@@ -2,18 +2,26 @@
 # Makefile for CuraEngine
 #
 
-# simplest working invocation to compile it
-#g++ main.cpp modelFile/modelFile.cpp clipper/clipper.cpp -o CuraEngine
-
 BUILD_DIR = build
 SRC_DIR = src
 LIBS_DIR = libs
 
+BUILD_TYPE = RELEASE
+
 VERSION ?= DEV
 CXX ?= g++
-CFLAGS += -c -Wall -Wextra -O3 -fomit-frame-pointer -std=c++11 -DVERSION=\"$(VERSION)\" -isystem libs
-# also include debug symbols
-#CFLAGS+=-ggdb
+CFLAGS += -c -Wall -Wextra -Wold-style-cast -Woverloaded-virtual -std=c++11 -DVERSION=\"$(VERSION)\" -isystem libs
+
+ifeq ($(BUILD_TYPE),DEBUG)
+	CFLAGS+=-ggdb -Og -g
+endif
+ifeq ($(BUILD_TYPE),PROFILE)
+	CFLAGS+= -pg
+endif
+ifeq ($(BUILD_TYPE),RELEASE)
+	CFLAGS+= -O3 -fomit-frame-pointer
+endif
+
 LDFLAGS += -Lbuild/ -lclipper
 
 SOURCES_RAW = bridge.cpp comb.cpp gcodeExport.cpp infill.cpp inset.cpp layerPart.cpp main.cpp optimizedModel.cpp pathOrderOptimizer.cpp polygonOptimizer.cpp raft.cpp settings.cpp skin.cpp skirt.cpp slicer.cpp support.cpp timeEstimate.cpp
@@ -30,17 +38,16 @@ EXECUTABLE = $(BUILD_DIR)/CuraEngine
 ifeq ($(OS),Windows_NT)
 	#For windows make it large address aware, which allows the process to use more then 2GB of memory.
 	EXECUTABLE := $(EXECUTABLE).exe
-	CFLAGS += -march=pentium4
-	LDFLAGS += -Wl,--large-address-aware -lm -lwsock32
-	MKDIR_PREFIX = mkdir 
-	MKDIR_POSTFIX = 2> NUL
+	CFLAGS += -march=pentium4 -flto
+	LDFLAGS += -Wl,--large-address-aware -lm -lwsock32 -flto
+	MKDIR_PREFIX = mkdir -p
 else
 	MKDIR_PREFIX = mkdir -p
-	MKDIR_POSTFIX = 
 	UNAME := $(shell uname)
 	ifeq ($(UNAME), Linux)
 		OPEN_HTML=firefox
-		LDFLAGS += --static
+		CFLAGS += -flto
+		LDFLAGS += --static -flto
 	endif
 	ifeq ($(UNAME), Darwin)
 		OPEN_HTML=open
@@ -59,7 +66,7 @@ $(EXECUTABLE): $(OBJECTS) $(BUILD_DIR)/libclipper.a
 	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
 
 $(DIRS):
-	-$(MKDIR_PREFIX) "$@" $(MKDIR_POSTFIX)
+	-@$(MKDIR_PREFIX) $(DIRS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CFLAGS) $< -o $@

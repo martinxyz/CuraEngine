@@ -1,5 +1,6 @@
 /** Copyright (C) 2013 David Braam - Released under terms of the AGPLv3 License */
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "gcodeExport.h"
 #include "pathOrderOptimizer.h"
@@ -27,7 +28,7 @@ GCodeExport::GCodeExport()
     
     currentSpeed = 0.0;
     retractionSpeed = 45;
-    isRetracted = true;
+    isRetracted = false;
     setFlavor(GCODE_FLAVOR_REPRAP);
     memset(extruderOffset, 0, sizeof(extruderOffset));
     f = stdout;
@@ -68,6 +69,12 @@ void GCodeExport::setExtruderOffset(int id, Point p)
     extruderOffset[id] = p;
 }
 
+void GCodeExport::setSwitchExtruderCode(std::string preSwitchExtruderCode, std::string postSwitchExtruderCode)
+{
+    this->preSwitchExtruderCode = preSwitchExtruderCode;
+    this->postSwitchExtruderCode = postSwitchExtruderCode;
+}
+
 void GCodeExport::setFlavor(int flavor)
 {
     this->flavor = flavor;
@@ -90,13 +97,13 @@ void GCodeExport::setFilename(const char* filename)
 
 bool GCodeExport::isOpened()
 {
-    return f != NULL;
+    return f != nullptr;
 }
 
 void GCodeExport::setExtrusion(int layerThickness, int filamentDiameter, int flow)
 {
     double filamentArea = M_PI * (INT2MM(filamentDiameter) / 2.0) * (INT2MM(filamentDiameter) / 2.0);
-    if (flavor == GCODE_FLAVOR_ULTIGCODE)//UltiGCode uses volume extrusion as E value, and thus does not need the filamentArea in the mix.
+    if (flavor == GCODE_FLAVOR_ULTIGCODE || flavor == GCODE_FLAVOR_REPRAP_VOLUMATRIC)//UltiGCode uses volume extrusion as E value, and thus does not need the filamentArea in the mix.
         extrusionPerMM = INT2MM(layerThickness);
     else
         extrusionPerMM = INT2MM(layerThickness) / filamentArea * double(flow) / 100.0;
@@ -188,6 +195,9 @@ void GCodeExport::writeDelay(double timeAmount)
 
 void GCodeExport::writeMove(Point p, double speed, int lineWidth)
 {
+    if (currentPosition.x == p.X && currentPosition.y == p.Y && currentPosition.z == zPos)
+        return;
+
     if (flavor == GCODE_FLAVOR_BFB)
     {
         //For Bits From Bytes machines, we need to handle this completely differently. As they do not use E values but RPM values.
@@ -234,7 +244,7 @@ void GCodeExport::writeMove(Point p, double speed, int lineWidth)
             {
                 if (retractionZHop > 0)
                     fprintf(f, "G1 Z%0.2f\n", double(currentPosition.z)/1000);
-                if (flavor == GCODE_FLAVOR_ULTIGCODE)
+                if (flavor == GCODE_FLAVOR_ULTIGCODE || flavor == GCODE_FLAVOR_REPRAP_VOLUMATRIC)
                 {
                     fprintf(f, "G11\n");
                 }else{
@@ -285,7 +295,7 @@ void GCodeExport::writeRetraction()
     
     if (retractionAmount > 0 && !isRetracted && extrusionAmountAtPreviousRetraction + minimalExtrusionBeforeRetraction < extrusionAmount)
     {
-        if (flavor == GCODE_FLAVOR_ULTIGCODE)
+        if (flavor == GCODE_FLAVOR_ULTIGCODE || flavor == GCODE_FLAVOR_REPRAP_VOLUMATRIC)
         {
             fprintf(f, "G10\n");
         }else{
@@ -312,22 +322,26 @@ void GCodeExport::switchExtruder(int newExtruder)
         return;
     }
     
-    if (flavor == GCODE_FLAVOR_ULTIGCODE)
+    if (flavor == GCODE_FLAVOR_ULTIGCODE || flavor == GCODE_FLAVOR_REPRAP_VOLUMATRIC)
     {
         fprintf(f, "G10 S1\n");
     }else{
         fprintf(f, "G1 F%i %c%0.5f\n", retractionSpeed * 60, extruderCharacter[extruderNr], extrusionAmount - extruderSwitchRetraction);
         currentSpeed = retractionSpeed;
     }
+    if (retractionZHop > 0)
+        fprintf(f, "G1 Z%0.2f\n", INT2MM(currentPosition.z + retractionZHop));
     resetExtrusionValue();
     extruderNr = newExtruder;
     if (flavor == GCODE_FLAVOR_MACH3)
         resetExtrusionValue();
     isRetracted = true;
+    writeCode(preSwitchExtruderCode.c_str());
     if (flavor == GCODE_FLAVOR_MAKERBOT)
         fprintf(f, "M135 T%i\n", extruderNr);
     else
         fprintf(f, "T%i\n", extruderNr);
+    writeCode(postSwitchExtruderCode.c_str());
 }
 
 void GCodeExport::writeCode(const char* str)
@@ -360,7 +374,7 @@ int GCodeExport::getFileSize(){
     return ftell(f);
 }
 void GCodeExport::tellFileSize() {
-    float fsize = (float) ftell(f);
+    float fsize = ftell(f);
     if(fsize > 1024*1024) {
         fsize /= 1024.0*1024.0;
         cura::log("Wrote %5.1f MB.\n",fsize);
@@ -425,7 +439,7 @@ GCodePlanner::GCodePlanner(Point startPositionXY, int startExtruder, int travelS
 {
     startPosition = startPositionXY;
     lastPosition = startPositionXY;
-    comb = NULL;
+    comb = nullptr;
     extraTime = 0.0;
     layerTime = 0.0;
     layerTimeWithoutSpeedLimits = 0.0;
@@ -450,7 +464,7 @@ void GCodePlanner::addTravel(Point p)
             path->retract = true;
         }
         forceRetraction = false;
-    }else if (comb != NULL)
+    }else if (comb != nullptr)
     {
         vector<Point> pointList;
         if (comb->calc(lastPosition, p, pointList))
@@ -611,7 +625,7 @@ double GCodePlanner::limitFlowGrowthRate(double initialFlow2D, double maxFlowGro
 
 void GCodePlanner::writeGCode(GCodeExport& gcode, bool liftHeadIfNeeded, int layerThickness)
 {
-    GCodePathConfig* lastConfig = NULL;
+    GCodePathConfig* lastConfig = nullptr;
     int extruder = gcode.getExtruderNr();
 
     for(unsigned int n=0; n<paths.size(); n++)
